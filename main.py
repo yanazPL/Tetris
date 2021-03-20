@@ -1,8 +1,21 @@
 import pygame
+import random
 
 
 class Tile:
+    """Represents one tile of brick"""
     def __init__(self, position, kind, is_brick_tile=False):
+        """
+        Attributes
+        ----------
+        position : tuple(int, int)
+            Represents position of a tile
+        kind :
+            Represents kind of brick which  tile belongs/belonged to.
+        is_brick_tile : bool
+            True for tiles belonging to active brick.
+            False for others.
+        """
         self.is_brick_tile = is_brick_tile
         self.position = position
         self.kind = kind
@@ -21,6 +34,7 @@ class Tile:
 
 
 class Brick:
+    """Represents active brick which player can control"""
     tile_vectors = {
         'O':
         {
@@ -28,13 +42,22 @@ class Brick:
             "right": ((0, 0), (1, 1), (0, 1), (1, 0)),
             "down": ((0, 0), (1, 1), (0, 1), (1, 0)),
             "left": ((0, 0), (1, 1), (0, 1), (1, 0))
+        },
+        'I':
+        {
+            "up": ((-1, 1), (0, 1), (1, 1), (2, 1)),
+            "right": ((1, -1), (1, 0), (1, 1), (1, 2)),
+            "down": ((-1, 0), (0, 0), (1, 0), (2, 0)),
+            "left": ((0, -1), (0, 0), (0, 1), (0, 2))
         }
     }
     spawn_pos = {
-        'O': (0, 5)
+        'O': (0, 5),
+        'I': (4, 0)
     }
     spawn_orientation = {
-        'O': "down"
+        'O': "down",
+        'I': "down"
     }
 
     def __init__(self, state, position, kind, orientation):
@@ -44,6 +67,7 @@ class Brick:
         self.move_or_rotate(position, orientation)
 
     def move(self, position):
+        """Moves the brick"""
         self.move_or_rotate(position, self.orientation)
 
     def move_or_rotate(self, position, orientation):
@@ -54,7 +78,10 @@ class Brick:
                     position[0] + vector[0] < 0 or
                     position[0] + vector[0] >= GameState.WORLD_WIDTH or
                     position[1] + vector[1] < 0 or
-                    position[1] + vector[1] >= GameState.WORLD_HEIGHT
+                    position[1] + vector[1] >= GameState.WORLD_HEIGHT or
+                    self.state.tile_exists(
+                        (position[0] + vector[0], position[1] + vector[1])
+                    )
                 ):
                     return
 
@@ -72,10 +99,30 @@ class Brick:
             self.state.tiles.append(tile)
             self.tiles.append(tile)
 
-    def rotate(self, orientation):
-        self.move_or_rotate(self.position, orientation)
+    def rotate(self, direction):
+        # orientation_order = ["up", "right", "down", "left"]
+        if direction == "right":
+            if self.orientation == "up":
+                new_orientation = "right"
+            elif self.orientation == "right":
+                new_orientation = "down"
+            elif self.orientation == "down":
+                new_orientation = "left"
+            elif self.orientation == "left":
+                new_orientation = "up"
+        elif direction == "left":
+            if self.orientation == "left":
+                new_orientation = "down"
+            elif self.orientation == "down":
+                new_orientation = "right"
+            elif self.orientation == "right":
+                new_orientation = "up"
+            elif self.orientation == "up":
+                new_orientation = "left"
+        self.move_or_rotate(self.position, new_orientation)
 
     def touches_ground(self):
+        """Checks whether brick is touching last row of world"""
         for tile in self.tiles:
             print(tile, end=" ")
             if tile.position[1] >= GameState.WORLD_HEIGHT - 1:
@@ -83,6 +130,7 @@ class Brick:
         return False
 
     def touches_tile(self):
+        """Checks if brick touches any non-brick tile"""
         for state_tile in self.state.tiles:
             for brick_tile in self.tiles:
                 if (
@@ -94,7 +142,7 @@ class Brick:
         return False
 
     def freeze(self):
-
+        """Ends control of player over the bricks"""
         for brick_tile in self.tiles[:]:
             print(brick_tile, end=" ")
             idx = self.state.tiles.index(brick_tile)
@@ -111,8 +159,13 @@ class GameState:
         self.brick = Brick(self, (0, 0), 'O', "down")
         self.epoch = 1
 
+    def tile_exists(self, position):
+        for tile in self.tiles:
+            if tile.position == position and not tile.is_brick_tile:
+                return True
+        return False
+
     def move_bricks_down(self):
-        # epoch_dividor = 120
         epoch_dividor = 20
         brick = self.brick
 
@@ -123,17 +176,40 @@ class GameState:
             self.epoch = 0
         self.epoch += 1
 
+    def hard_drop(self):
+        brick = self.brick
+        while not (brick.touches_ground() or brick.touches_tile()):
+            brick.move(
+                (brick.position[0], brick.position[1] + 1)
+            )
+
     def respawn(self):
         print("before respawn: ", end=" ")
         for tile in self.brick.tiles:
             print(tile, sep=" ", end="")
-        self.brick.move_or_rotate(
-            Brick.spawn_pos['O'],
-            Brick.spawn_orientation['O']
+
+        brick_kind = random.choice(
+            list(Brick.tile_vectors.keys())
         )
+        self.brick.kind = brick_kind
+        self.brick.move_or_rotate(
+            Brick.spawn_pos[brick_kind],
+            Brick.spawn_orientation[brick_kind]
+        )
+
+    def update(self):
+        """Non player controlled after-move actions are here"""
+        if (self.brick.touches_ground() or
+                self.brick.touches_tile()):
+            self.brick.freeze()
+            self.respawn()
+        else:
+            self.move_bricks_down()
+            # check lines
 
 
 class UserInterface():
+    """Bridges user actions and game state. Uses pyGame"""
     FPS = 60
     CELL_SIZE = 20
 
@@ -156,7 +232,9 @@ class UserInterface():
 
     def process_input(self):
         events = pygame.event.get()
+
         brick = self.game_state.brick
+
         for event in events:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_LEFT:
                 brick.move(
@@ -166,17 +244,23 @@ class UserInterface():
                 brick.move(
                     (brick.position[0] + 1, brick.position[1])
                 )
+            if (event.type == pygame.KEYDOWN and
+                    (event.key == pygame.K_x or event.key == pygame.K_UP)):
+                brick.rotate("right")
+                pygame.key.set_repeat(100)
+            if (event.type == pygame.KEYDOWN and
+                    (event.key == pygame.K_RCTRL or event.key == pygame.K_z)):
+                brick.rotate("left")
+                pygame.key.set_repeat(100)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                self.game_state.hard_drop()
 
     def update(self):
-        if self.game_state.brick.touches_ground() or self.game_state.brick.touches_tile():
-            self.game_state.brick.freeze()
-            self.game_state.respawn()
-        else:
-            self.game_state.move_bricks_down()
-            # check lines
+        self.game_state.update()
 
     def draw(self):
-        color = {'0': (255, 255, 255), 'O': (255, 255, 0)}
+        """Draws tiles with approperiate colors"""
+        color = {'0': (255, 255, 255), 'O': (255, 255, 0), 'I': (0, 128, 128)}
         self.window.fill((255, 255, 255))
         for tile in self.game_state.tiles:
             rect = pygame.Rect(
@@ -189,6 +273,7 @@ class UserInterface():
         pygame.display.update()
 
     def run(self):
+        """Runs the game loop"""
         while self.running:
             self.process_input()
             self.update()
