@@ -231,7 +231,6 @@ class UserInterface():
         self.running = True
 
     def process_input(self):
-
         events = pygame.event.get()
 
         brick = self.game_state.brick
@@ -257,11 +256,9 @@ class UserInterface():
                 if event.key == pygame.K_SPACE:
                     pygame.key.set_repeat(0)
                     self.game_state.hard_drop()
-                if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
-                    if self.running:
-                        self.running = False
-                    else:
-                        self.running = True
+                #if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
+
+
     def update(self):
         self.game_state.update()
 
