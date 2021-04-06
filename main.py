@@ -231,30 +231,37 @@ class UserInterface():
         self.running = True
 
     def process_input(self):
+
         events = pygame.event.get()
 
         brick = self.game_state.brick
 
         for event in events:
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_LEFT:
-                brick.move(
-                    (brick.position[0] - 1, brick.position[1])
-                )
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RIGHT:
-                brick.move(
-                    (brick.position[0] + 1, brick.position[1])
-                )
-            if (event.type == pygame.KEYDOWN and
-                    (event.key == pygame.K_x or event.key == pygame.K_UP)):
-                brick.rotate("right")
-                pygame.key.set_repeat(100)
-            if (event.type == pygame.KEYDOWN and
-                    (event.key == pygame.K_RCTRL or event.key == pygame.K_z)):
-                brick.rotate("left")
-                pygame.key.set_repeat(100)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                self.game_state.hard_drop()
-
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    brick.move(
+                        (brick.position[0] - 1, brick.position[1])
+                    )
+                    pygame.key.set_repeat(100)
+                if event.key == pygame.K_RIGHT:
+                    brick.move(
+                        (brick.position[0] + 1, brick.position[1])
+                    )
+                    pygame.key.set_repeat(100)
+                if event.key == pygame.K_x or event.key == pygame.K_UP:
+                    brick.rotate("right")
+                    pygame.key.set_repeat(0)
+                if event.key == pygame.K_RCTRL or event.key == pygame.K_z:
+                    brick.rotate("left")
+                    pygame.key.set_repeat(0)
+                if event.key == pygame.K_SPACE:
+                    pygame.key.set_repeat(0)
+                    self.game_state.hard_drop()
+                if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
+                    if self.running:
+                        self.running = False
+                    else:
+                        self.running = True
     def update(self):
         self.game_state.update()
 
