@@ -2,6 +2,26 @@ import pygame
 import random
 
 
+class BrickRandomizer:
+    def __init__(self):
+        self._refill()
+
+    def _refill(self):
+        self.bricks = random.shuffle(list(Brick.tile_vectors.keys()))
+
+    def next_brick(self):
+        if not self.bricks:
+            self._refill()
+        return self.bricks.pop()
+
+
+class ScoreManager():
+    def __init__(self):
+        self.combo_count = 0
+        self.is_hard_dropped = False
+        pass
+
+
 class Tile:
     """Represents one tile of brick"""
     def __init__(self, position, kind, is_brick_tile=False):
@@ -124,7 +144,7 @@ class Brick:
     def touches_ground(self):
         """Checks whether brick is touching last row of world"""
         for tile in self.tiles:
-            print(tile, end=" ")
+            # print(tile, end=" ")
             if tile.position[1] >= GameState.WORLD_HEIGHT - 1:
                 return True
         return False
@@ -144,7 +164,7 @@ class Brick:
     def freeze(self):
         """Ends control of player over the bricks"""
         for brick_tile in self.tiles[:]:
-            print(brick_tile, end=" ")
+            # print(brick_tile, end=" ")
             idx = self.state.tiles.index(brick_tile)
             self.tiles.remove(brick_tile)
             self.state.tiles[idx].is_brick_tile = False
@@ -153,11 +173,31 @@ class Brick:
 class GameState:
     WORLD_WIDTH = 10
     WORLD_HEIGHT = 40
+    VISIBLE_HEIGHT = 20
+
+    def game_lost(self):
+        for i in range(GameState.WORLD_WIDTH):
+            if self.tile_exists((
+                i,
+                GameState.WORLD_HEIGHT - GameState.VISIBLE_HEIGHT - 1
+            )):
+                return True
+        return False
 
     def __init__(self):
         self.tiles = []
         self.brick = Brick(self, (0, 0), 'O', "down")
+        self.held_brick_kind = None
+        self.points = 0
+        self.level = 1
         self.epoch = 1
+
+    def hold_piece(self):
+        if self.held_brick:
+            pass
+        else:
+            self.respawn()
+            self.held_brick = Brick.kind
 
     def tile_exists(self, position):
         for tile in self.tiles:
@@ -184,9 +224,9 @@ class GameState:
             )
 
     def respawn(self):
-        print("before respawn: ", end=" ")
-        for tile in self.brick.tiles:
-            print(tile, sep=" ", end="")
+        # print("before respawn: ", end=" ")
+        # for tile in self.brick.tiles:
+        #     print(tile, sep=" ", end="")
 
         brick_kind = random.choice(
             list(Brick.tile_vectors.keys())
@@ -197,11 +237,46 @@ class GameState:
             Brick.spawn_orientation[brick_kind]
         )
 
+    def _move_row_down_by(self, row, offset):
+        if offset:
+            print(f"self._move_row_down_by({row}, {offset})")
+            for tile in self._tiles_from_row(row):
+                print(f"{tile.position=}")
+                tile.position = (tile.position[0], row + offset)
+                print(f"{tile.position=}")
+
+    def _clear_lines(self):
+        # for i in range(GameState.WORLD_HEIGHT):
+        lines_below = 0
+        lines_streak = 0
+        for i in range(GameState.WORLD_HEIGHT - 1, -1, -1):
+            if self._row_is_full(i):
+                lines_below += 1
+                lines_streak += 1
+                self._delete_row(i)
+            else:
+                lines_streak = 0
+                self._move_row_down_by(i, lines_below)
+
+    def _row_is_full(self, row):
+        for col in range(GameState.WORLD_WIDTH):
+            if not self.tile_exists((col, row)):
+                return False
+        print(f"row {row} is full")
+        return True
+
+    def _tiles_from_row(self, row):
+        return [tile for tile in self.tiles if tile.position[1] == row]
+
+    def _delete_row(self, row):
+        self.tiles = [tile for tile in self.tiles if tile.position[1] != row]
+
     def update(self):
         """Non player controlled after-move actions are here"""
         if (self.brick.touches_ground() or
                 self.brick.touches_tile()):
             self.brick.freeze()
+            self._clear_lines()
             self.respawn()
         else:
             self.move_bricks_down()
@@ -209,7 +284,7 @@ class GameState:
 
 
 class UserInterface():
-    """Bridges user actions and game state. Uses pyGame"""
+    """game.Bridges user actions and game state. Uses pyGame"""
     FPS = 60
     CELL_SIZE = 20
 
@@ -230,13 +305,23 @@ class UserInterface():
         self.clock = pygame.time.Clock()
         self.running = True
 
+    def reset(self):
+        self.game_state = GameState()
+        self.clock = pygame.time.Clock()
+
     def process_input(self):
         events = pygame.event.get()
-
         brick = self.game_state.brick
 
         for event in events:
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F5:
+                    self.reset()
+                if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
+                    if self.running:
+                        self.running = False
+                    else:
+                        self.running = True
                 if event.key == pygame.K_LEFT:
                     brick.move(
                         (brick.position[0] - 1, brick.position[1])
@@ -256,11 +341,11 @@ class UserInterface():
                 if event.key == pygame.K_SPACE:
                     pygame.key.set_repeat(0)
                     self.game_state.hard_drop()
-                #if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
-
 
     def update(self):
         self.game_state.update()
+        if self.game_state.game_lost():
+            self.running = False
 
     def draw(self):
         """Draws tiles with approperiate colors"""
@@ -278,11 +363,12 @@ class UserInterface():
 
     def run(self):
         """Runs the game loop"""
-        while self.running:
+        while True:
             self.process_input()
-            self.update()
-            self.draw()
-            self.clock.tick(UserInterface.FPS)
+            if self.running:
+                self.update()
+                self.draw()
+                self.clock.tick(UserInterface.FPS)
 
 
 UserInterface().run()
