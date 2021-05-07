@@ -7,7 +7,8 @@ class BrickRandomizer:
         self._refill()
 
     def _refill(self):
-        self.bricks = random.shuffle(list(Brick.tile_vectors.keys()))
+        self.bricks = list(Brick.tile_vectors.keys())
+        random.shuffle(self.bricks)
 
     def next_brick(self):
         if not self.bricks:
@@ -19,7 +20,6 @@ class ScoreManager():
     def __init__(self):
         self.combo_count = 0
         self.is_hard_dropped = False
-        pass
 
 
 class Tile:
@@ -88,22 +88,20 @@ class Brick:
 
     def move(self, position):
         """Moves the brick"""
-        self.move_or_rotate(position, self.orientation)
+        return self.move_or_rotate(position, self.orientation)
 
     def move_or_rotate(self, position, orientation):
 
         for tile in self.tiles:
             for vector in Brick.tile_vectors[self.kind][orientation]:
                 if (
-                    position[0] + vector[0] < 0 or
-                    position[0] + vector[0] >= GameState.WORLD_WIDTH or
-                    position[1] + vector[1] < 0 or
-                    position[1] + vector[1] >= GameState.WORLD_HEIGHT or
-                    self.state.tile_exists(
-                        (position[0] + vector[0], position[1] + vector[1])
-                    )
+                    (x := position[0] + vector[0]) < 0 or
+                    x >= GameState.WORLD_WIDTH or
+                    (y := position[1] + vector[1]) < 0 or
+                    y >= GameState.WORLD_HEIGHT or
+                    self.state.tile_exists((x, y))
                 ):
-                    return
+                    return False
 
         self.orientation = orientation
         self.position = position
@@ -118,28 +116,34 @@ class Brick:
                 )
             self.state.tiles.append(tile)
             self.tiles.append(tile)
+        return True
 
     def rotate(self, direction):
         # orientation_order = ["up", "right", "down", "left"]
+        new_orientation = self._next_orientation(direction, self.orientation)
+        return self.move_or_rotate(self.position, new_orientation)
+
+    def _next_orientation(self, direction, old_orientation):
         if direction == "right":
-            if self.orientation == "up":
+            if old_orientation == "up":
                 new_orientation = "right"
-            elif self.orientation == "right":
+            elif old_orientation == "right":
                 new_orientation = "down"
-            elif self.orientation == "down":
+            elif old_orientation == "down":
                 new_orientation = "left"
-            elif self.orientation == "left":
+            elif old_orientation == "left":
                 new_orientation = "up"
         elif direction == "left":
-            if self.orientation == "left":
+            if old_orientation == "left":
                 new_orientation = "down"
-            elif self.orientation == "down":
+            elif old_orientation == "down":
                 new_orientation = "right"
-            elif self.orientation == "right":
+            elif old_orientation == "right":
                 new_orientation = "up"
-            elif self.orientation == "up":
+            elif old_orientation == "up":
                 new_orientation = "left"
-        self.move_or_rotate(self.position, new_orientation)
+
+        return new_orientation
 
     def touches_ground(self):
         """Checks whether brick is touching last row of world"""
@@ -186,6 +190,7 @@ class GameState:
 
     def __init__(self):
         self.tiles = []
+        self.brick_randomizer = BrickRandomizer()
         self.brick = Brick(self, (0, 0), 'O', "down")
         self.held_brick_kind = None
         self.points = 0
@@ -193,11 +198,16 @@ class GameState:
         self.epoch = 1
 
     def hold_piece(self):
-        if self.held_brick:
-            pass
-        else:
-            self.respawn()
-            self.held_brick = Brick.kind
+        # if self.held_brick:
+        #     if self.brick.move_or_rotate():
+
+        # else:
+        #     self.held_brick = Brick.kind
+        # if self.brick.move_or_rotate(
+        #     self.brick.position,
+        #     Brick.spawn_orientation[self.brick.kind]
+        # ):
+        pass
 
     def tile_exists(self, position):
         for tile in self.tiles:
@@ -224,13 +234,7 @@ class GameState:
             )
 
     def respawn(self):
-        # print("before respawn: ", end=" ")
-        # for tile in self.brick.tiles:
-        #     print(tile, sep=" ", end="")
-
-        brick_kind = random.choice(
-            list(Brick.tile_vectors.keys())
-        )
+        brick_kind = self.brick_randomizer.next_brick()
         self.brick.kind = brick_kind
         self.brick.move_or_rotate(
             Brick.spawn_pos[brick_kind],
@@ -318,10 +322,7 @@ class UserInterface():
                 if event.key == pygame.K_F5:
                     self.reset()
                 if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
-                    if self.running:
-                        self.running = False
-                    else:
-                        self.running = True
+                    self.running = not self.running
                 if event.key == pygame.K_LEFT:
                     brick.move(
                         (brick.position[0] - 1, brick.position[1])
@@ -371,4 +372,5 @@ class UserInterface():
                 self.clock.tick(UserInterface.FPS)
 
 
-UserInterface().run()
+if __name__ == "__main__":
+    UserInterface().run()
