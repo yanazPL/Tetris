@@ -58,26 +58,98 @@ class Brick:
     tile_vectors = {
         'O':
         {
+            "down": ((0, 0), (1, 1), (0, 1), (1, 0)),
+            "left": ((0, 0), (1, 1), (0, 1), (1, 0)),
             "up": ((0, 0), (1, 1), (0, 1), (1, 0)),
             "right": ((0, 0), (1, 1), (0, 1), (1, 0)),
-            "down": ((0, 0), (1, 1), (0, 1), (1, 0)),
-            "left": ((0, 0), (1, 1), (0, 1), (1, 0))
+
         },
         'I':
         {
+            "down": ((-1, 0), (0, 0), (1, 0), (2, 0)),
+            "left": ((0, -1), (0, 0), (0, 1), (0, 2)),
             "up": ((-1, 1), (0, 1), (1, 1), (2, 1)),
             "right": ((1, -1), (1, 0), (1, 1), (1, 2)),
-            "down": ((-1, 0), (0, 0), (1, 0), (2, 0)),
-            "left": ((0, -1), (0, 0), (0, 1), (0, 2))
+        },
+        'T':
+        {
+            "down": ((0, 0), (0, -1), (-1, 0), (1, 0)),
+            "left": ((0, 0), (0, -1), (0, 1), (1, 0)),
+            "up": ((0, 0), (-1, 0), (1, 0), (0, 1)),
+            "right": ((0, 0), (-1, 0), (0, -1), (0, 1))
+        },
+        'S':
+        {
+            "down": ((0, 0), (0, -1), (1, -1), (-1, 0)),
+            "left": ((0, 0), (0, -1), (1, 0), (1, 1)),
+            "up": ((0, 0), (0, 1), (1, 0), (-1, 1)),
+            "right": ((0, 0), (-1, 0), (-1, -1), (0, 1))
+
+        },
+        'Z':
+        {
+            "down": ((0, 0), (0, -1), (-1, -1), (1, 0)),
+            "left": ((0, 0), (1, 0), (0, 1), (1, -1)),
+            "up": ((0, 0), (-1, 0), (0, 1), (1, 1)),
+            "right": ((0, 0), (-1, 0), (0, -1), (-1, 1))
+
+        },
+        'J':
+        {
+            "down": ((0, 0), (-1, 0), (1, 0), (-1, -1)),
+            "left": ((0, 0), (0, -1), (0, 1), (1, -1)),
+            "up": ((0, 0), (-1, 0), (1, 0), (1, 1)),
+            "right": ((0, 0), (0, -1), (0, 1), (-1, 1))
+
+        },
+        'L':
+        {
+            "down": ((0, 0), (-1, 0), (1, 0), (1, -1)),
+            "left": ((0, 0), (0, -1), (0, 1), (1, 1)),
+            "up": ((0, 0), (-1, 0), (1, 0), (-1, 1)),
+            "right": ((0, 0), (0, -1), (0, 1), (-1, -1))
+        },
+    }
+    wall_kick_vectors = {
+        'I': {
+            # (orienation from, orientation to): [test1, ..., test5]
+            ("down", "left"): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],
+            ("left", "down"): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],
+            ("left", "up"): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)],
+            ("up", "left"): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],
+            ("up", "right"): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],
+            ("right", "up"): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],
+            ("right", "down"): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],
+            ("down", "right"): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, -1)]
+        },
+        'other': {
+            ("down", "left"): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
+            ("left", "down"): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+            ("left", "up"): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+            ("up", "left"): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
+            ("up", "right"): [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
+            ("right", "up"): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+            ("right", "down"): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+            ("down", "right"): [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]
         }
     }
     spawn_pos = {
-        'O': (0, 5),
-        'I': (4, 0)
+        'O': (4, 5),
+        'I': (4, 0),
+        'T': (4, 3),
+        'Z': (4, 3),
+        'J': (4, 3),
+        'S': (4, 3),
+        'L': (4, 3)
     }
     spawn_orientation = {
         'O': "down",
-        'I': "down"
+        'I': "down",
+        'T': "down",
+        'Z': "down",
+        'J': "down",
+        'S': "down",
+        'L': "down"
     }
 
     def __init__(self, state, position, kind, orientation):
@@ -119,9 +191,20 @@ class Brick:
         return True
 
     def rotate(self, direction):
-        # orientation_order = ["up", "right", "down", "left"]
         new_orientation = self._next_orientation(direction, self.orientation)
-        return self.move_or_rotate(self.position, new_orientation)
+
+        if self.kind == 'I':
+            tests = Brick.wall_kick_vectors['I'][(self.orientation, new_orientation)]
+        else:
+            tests = Brick.wall_kick_vectors['other'][(self.orientation, new_orientation)]
+
+        # print(tests)
+        for test in tests:
+            if self.move_or_rotate(
+                (self.position[0] + test[0], self.position[1] + test[1]),
+                new_orientation
+            ):
+                break
 
     def _next_orientation(self, direction, old_orientation):
         if direction == "right":
@@ -198,15 +281,6 @@ class GameState:
         self.epoch = 1
 
     def hold_piece(self):
-        # if self.held_brick:
-        #     if self.brick.move_or_rotate():
-
-        # else:
-        #     self.held_brick = Brick.kind
-        # if self.brick.move_or_rotate(
-        #     self.brick.position,
-        #     Brick.spawn_orientation[self.brick.kind]
-        # ):
         pass
 
     def tile_exists(self, position):
@@ -243,11 +317,11 @@ class GameState:
 
     def _move_row_down_by(self, row, offset):
         if offset:
-            print(f"self._move_row_down_by({row}, {offset})")
+            # print(f"self._move_row_down_by({row}, {offset})")
             for tile in self._tiles_from_row(row):
-                print(f"{tile.position=}")
+                # print(f"{tile.position=}")
                 tile.position = (tile.position[0], row + offset)
-                print(f"{tile.position=}")
+                # print(f"{tile.position=}")
 
     def _clear_lines(self):
         # for i in range(GameState.WORLD_HEIGHT):
@@ -350,7 +424,15 @@ class UserInterface():
 
     def draw(self):
         """Draws tiles with approperiate colors"""
-        color = {'0': (255, 255, 255), 'O': (255, 255, 0), 'I': (0, 128, 128)}
+        color = {
+            'O': (255, 255, 0),
+            'I': (0, 128, 128),
+            'T': (199, 21, 133),
+            'Z': (255, 0, 0),
+            'S': (0, 255, 0),
+            'J': (0, 0, 255),
+            'L': (241, 121, 34),
+        }
         self.window.fill((255, 255, 255))
         for tile in self.game_state.tiles:
             rect = pygame.Rect(
