@@ -1,6 +1,6 @@
 import pygame
 import random
-
+import copy
 
 class BrickRandomizer:
     def __init__(self):
@@ -51,6 +51,26 @@ class Tile:
                 self.kind == other.kind
             )
         return False
+
+
+def tiles_touch_ground(tiles):
+    for tile in tiles:
+        # print(tile, end=" ")
+        if tile.position[1] >= GameState.WORLD_HEIGHT - 1:
+            return True
+    return False
+
+
+def tiles_touch_tile(tiles, state_tiles):
+    for state_tile in state_tiles:
+        for tile in tiles:
+            if (
+                not state_tile.is_brick_tile and
+                tile.position[0] == state_tile.position[0] and
+                tile.position[1] == state_tile.position[1] - 1
+            ):
+                return True
+    return False
 
 
 class Brick:
@@ -154,16 +174,22 @@ class Brick:
 
     def __init__(self, state, position, kind, orientation):
         self.state = state
+        self.position = position
         self.kind = kind
+        self.orientation = orientation
         self.tiles = []
-        self.move_or_rotate(position, orientation)
+        self.ghost = GhostBrick(self)
+        self.is_moving_left = False
+        self.is_moving_right = False
+        self.is_soft_dropped = False
 
     def move(self, position):
         """Moves the brick"""
         return self.move_or_rotate(position, self.orientation)
 
     def move_or_rotate(self, position, orientation):
-
+        if position == self.position and orientation == self.orientation:
+            return False
         for tile in self.tiles:
             for vector in Brick.tile_vectors[self.kind][orientation]:
                 if (
@@ -188,6 +214,7 @@ class Brick:
                 )
             self.state.tiles.append(tile)
             self.tiles.append(tile)
+        self.ghost.update_tiles()
         return True
 
     def rotate(self, direction):
@@ -204,7 +231,9 @@ class Brick:
                 (self.position[0] + test[0], self.position[1] + test[1]),
                 new_orientation
             ):
-                break
+                self._lock_delay_epoch = 1
+                return True
+            return False
 
     def _next_orientation(self, direction, old_orientation):
         if direction == "right":
@@ -230,25 +259,13 @@ class Brick:
 
     def touches_ground(self):
         """Checks whether brick is touching last row of world"""
-        for tile in self.tiles:
-            # print(tile, end=" ")
-            if tile.position[1] >= GameState.WORLD_HEIGHT - 1:
-                return True
-        return False
+        return tiles_touch_ground(self.tiles)
 
     def touches_tile(self):
         """Checks if brick touches any non-brick tile"""
-        for state_tile in self.state.tiles:
-            for brick_tile in self.tiles:
-                if (
-                    not state_tile.is_brick_tile and
-                    brick_tile.position[0] == state_tile.position[0] and
-                    brick_tile.position[1] == state_tile.position[1] - 1
-                ):
-                    return True
-        return False
+        return tiles_touch_tile(self.tiles, self.state.tiles)
 
-    def freeze(self):
+    def lock(self):
         """Ends control of player over the bricks"""
         for brick_tile in self.tiles[:]:
             # print(brick_tile, end=" ")
@@ -257,10 +274,27 @@ class Brick:
             self.state.tiles[idx].is_brick_tile = False
 
 
+class GhostBrick():
+    def __init__(self, brick):
+        self.brick = brick
+        self.tiles = []
+
+    def update_tiles(self):
+        self.tiles = copy.deepcopy(self.brick.tiles)
+        while (
+            not tiles_touch_ground(self.tiles) and
+            not tiles_touch_tile(self.tiles, self.brick.state.tiles)
+        ):
+            for tile in self.tiles:
+                tile.position = (tile.position[0], tile.position[1] + 1)
+
+
+
 class GameState:
     WORLD_WIDTH = 10
     WORLD_HEIGHT = 40
     VISIBLE_HEIGHT = 20
+    PLAYER_SPEED = 5
 
     def game_lost(self):
         for i in range(GameState.WORLD_WIDTH):
@@ -275,10 +309,18 @@ class GameState:
         self.tiles = []
         self.brick_randomizer = BrickRandomizer()
         self.brick = Brick(self, (0, 0), 'O', "down")
+        self.ghost = GhostBrick(self.brick)
         self.held_brick_kind = None
         self.points = 0
         self.level = 1
+        self.game_speed = 20
+
         self.epoch = 1
+        self._lock_delay_epoch = 1
+        self._move_epoch = 1
+        self.is_moving = False
+
+        self.respawn()
 
     def hold_piece(self):
         pass
@@ -289,16 +331,34 @@ class GameState:
                 return True
         return False
 
-    def move_bricks_down(self):
-        epoch_dividor = 20
+    def move_brick_down(self):
+        epoch_dividor = GameState.PLAYER_SPEED if self.brick.is_soft_dropped else self.game_speed
         brick = self.brick
 
         if self.epoch >= epoch_dividor:
             brick.move(
                 (brick.position[0], brick.position[1] + 1)
             )
+            self._lock_delay_epoch = 1
             self.epoch = 0
         self.epoch += 1
+
+    def move_horizontaly(self):
+        brick = self.brick
+        if brick.is_moving_right and self._move_epoch >= GameState.PLAYER_SPEED:
+            brick.move(
+                (brick.position[0] + 1, brick.position[1])
+            )
+            self._move_epoch = 0
+            self._lock_delay_epoch = 1
+
+        if brick.is_moving_left and self._move_epoch >= GameState.PLAYER_SPEED:
+            brick.move(
+                (brick.position[0] - 1, brick.position[1])
+            )
+            self._move_epoch = 0
+            self._lock_delay_epoch = 1
+        self._move_epoch += 1
 
     def hard_drop(self):
         brick = self.brick
@@ -306,6 +366,7 @@ class GameState:
             brick.move(
                 (brick.position[0], brick.position[1] + 1)
             )
+            self._lock_delay_epoch = 30
 
     def respawn(self):
         brick_kind = self.brick_randomizer.next_brick()
@@ -351,13 +412,19 @@ class GameState:
 
     def update(self):
         """Non player controlled after-move actions are here"""
+
         if (self.brick.touches_ground() or
                 self.brick.touches_tile()):
-            self.brick.freeze()
-            self._clear_lines()
-            self.respawn()
+            self._lock_delay_epoch += 1
+            self.move_horizontaly()
+            if self._lock_delay_epoch >= 30:
+                self.brick.lock()
+                self._lock_delay_epoch = 1
+                self._clear_lines()
+                self.respawn()
         else:
-            self.move_bricks_down()
+            self.move_horizontaly()
+            self.move_brick_down()
             # check lines
 
 
@@ -398,15 +465,11 @@ class UserInterface():
                 if event.key == pygame.K_F1 or event.key == pygame.K_ESCAPE:
                     self.running = not self.running
                 if event.key == pygame.K_LEFT:
-                    brick.move(
-                        (brick.position[0] - 1, brick.position[1])
-                    )
-                    pygame.key.set_repeat(100)
+                    brick.is_moving_left = True
                 if event.key == pygame.K_RIGHT:
-                    brick.move(
-                        (brick.position[0] + 1, brick.position[1])
-                    )
-                    pygame.key.set_repeat(100)
+                    brick.is_moving_right = True
+                if event.key == pygame.K_DOWN:
+                    brick.is_soft_dropped = True
                 if event.key == pygame.K_x or event.key == pygame.K_UP:
                     brick.rotate("right")
                     pygame.key.set_repeat(0)
@@ -416,6 +479,13 @@ class UserInterface():
                 if event.key == pygame.K_SPACE:
                     pygame.key.set_repeat(0)
                     self.game_state.hard_drop()
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT:
+                    brick.is_moving_left = False
+                if event.key == pygame.K_RIGHT:
+                    brick.is_moving_right = False
+                if event.key == pygame.K_DOWN:
+                    brick.is_soft_dropped = False
 
     def update(self):
         self.game_state.update()
@@ -433,15 +503,28 @@ class UserInterface():
             'J': (0, 0, 255),
             'L': (241, 121, 34),
         }
-        self.window.fill((255, 255, 255))
-        for tile in self.game_state.tiles:
+
+        def draw_tile(self, tile, ghost_tile=False):
             rect = pygame.Rect(
                 tile.position[0] * self.CELL_SIZE,
                 tile.position[1] * self.CELL_SIZE,
                 self.CELL_SIZE,
                 self.CELL_SIZE
             )
-            pygame.draw.rect(self.window, color[tile.kind], rect)
+            if not ghost_tile:
+                pygame.draw.rect(self.window, color[tile.kind], rect)
+            else:
+                # pygame.draw.rect(self.window, (0, 0, 0), rect)
+                pygame.draw.rect(self.window, color[tile.kind], rect, width=2)
+                # rect.inflate(-4, -4)
+                # pygame.draw.rect(self.window, (255,255,255), rect)
+
+        self.window.fill((255, 255, 255))
+        for tile in self.game_state.brick.ghost.tiles:
+            draw_tile(self, tile, ghost_tile=True)
+        for tile in self.game_state.tiles:
+            draw_tile(self, tile)
+
         pygame.display.update()
 
     def run(self):
